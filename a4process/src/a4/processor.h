@@ -7,6 +7,7 @@
 
 #include <a4/types.h>
 
+#include <a4/input_stream.h>
 #include <a4/message.h>
 #include <a4/register.h>
 
@@ -158,6 +159,7 @@ class Processor {
         /// This is the currently valid metadata message. If you manipulate it in AUTO mode
         /// in process_new_metadata the changes are written out.
         shared<const A4Message> metadata_message;
+        shared<const A4Message> current_message;
 
         /// Set the behaviour of metadata
         void set_metadata_behavior(MetadataBehavior m) { assert(!locked); metadata_behavior = m; }
@@ -172,8 +174,12 @@ class Processor {
 
         void lock_and_load() { locked = true; };
         bool skim_written;
+
         friend class a4::process::Driver;
-        
+    
+        virtual bool try_reading(a4::io::InputStream & istream) {return false;};
+        virtual void set_current_message(shared<const A4Message> msg) {current_message = msg;};
+        virtual void process_current_message() { process_message(current_message); }
     private:
         bool locked;
         MetadataBehavior metadata_behavior;
@@ -220,6 +226,17 @@ class ProcessorOf : public Processor {
         }
 
     protected:
+        virtual void set_current_message(shared<const A4Message> msg) {current_message = msg;};
+        void process_current_message() {
+            if (current_message) process_message(current_message);
+            else process(_current_message);
+        }
+        bool try_reading(a4::io::InputStream & istream) {
+            bool res = istream.try_read(_current_message);
+            if (res) { current_message.reset(); };
+            return res;
+        }
+        ProtoMessage _current_message;
         friend class a4::process::Driver;
 };
 

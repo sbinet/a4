@@ -228,10 +228,18 @@ void SimpleCommandLineDriver::simple_thread(SimpleCommandLineDriver* self,
         if (!run)
             break;
 
-        while (shared<A4Message> msg = instream->next_with_metadata()) {
+
+        while (true) {
+            shared<A4Message> msg;
             if (!run)
                 break;
-                
+            
+            if (not self->try_reading(p, *instream.get())) {
+                msg = instream->next_with_metadata();
+                if (not msg) break;
+                self->set_current_message(p, msg);
+            }
+
 #ifdef HAVE_ATOMIC
             const uint64_t n = total_events_processed++;
             if (n % 10000 == 0) {
@@ -269,12 +277,12 @@ void SimpleCommandLineDriver::simple_thread(SimpleCommandLineDriver* self,
                 }
             }
             // Do not send metadata messages to process()
-            if (msg->metadata())
+            if (msg && msg->metadata())
                 continue;
 
             self->set_store(p, output_adaptor->backstore->store());
             try {
-                process_rerun_systematics(p, msg);
+                process_rerun_systematics(p);
             } catch (...) {
                 ERROR("Caught an exception in the processor");
                 if (msg) {
@@ -286,7 +294,7 @@ void SimpleCommandLineDriver::simple_thread(SimpleCommandLineDriver* self,
                         ERROR("Could not show event");
                     }
                 } else {
-                    ERROR("Processed message is invalid");
+                    ERROR("Processed message is not available");
                 }
                 throw;
             }
